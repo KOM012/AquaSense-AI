@@ -1,120 +1,84 @@
-# transmitter.py - SIMPLIFIED WITH DIFFERENT FREQUENCIES
+# transmitter.py - ULTRA SIMPLE VERSION
 import serial
+import serial.tools.list_ports
 import time
-import threading
-from serial.tools import list_ports
+from typing import Optional
 
 class BluetoothTransmitter:
-    def __init__(self, baud=9600):
-        self.baud = baud
-        self.ser = None
+    def __init__(self):
+        self.ser: Optional[serial.Serial] = None
         self.connected = False
-        self.obstruction_pulsing = False
-        self.stop_pulse = threading.Event()
         
     def list_ports(self):
-        """Get available ports"""
-        try:
-            ports = [port.device for port in list_ports.comports()]
-            print(f"Available ports: {ports}")
-            return ports
-        except:
-            return ["COM3", "COM4", "COM5", "COM6", "COM7"]
+        """List available serial ports"""
+        ports = serial.tools.list_ports.comports()
+        return [port.device for port in ports]
     
-    def connect(self, port: str) -> bool:
-        """Connect to Arduino"""
+    def connect(self, port: str, baudrate: int = 9600) -> bool:
+        """Connect to specified serial port"""
         try:
-            # Close existing
-            if self.ser:
-                self.ser.close()
-            
-            print(f"Connecting to {port}...")
-            self.ser = serial.Serial(port, self.baud, timeout=1)
-            time.sleep(2)  # Wait for Arduino
-            
-            # Test connection
-            self.ser.write(b'\n')
-            time.sleep(0.5)
-            
+            self.ser = serial.Serial(port, baudrate, timeout=1)
             self.connected = True
-            print(f"✅ Connected to {port}")
+            print(f"✅ Connected to {port} at {baudrate} baud")
+            time.sleep(2)  # Wait for Arduino to reset
             return True
-            
         except Exception as e:
             print(f"❌ Connection failed: {e}")
             self.connected = False
             return False
     
     def disconnect(self):
-        """Disconnect"""
-        try:
-            self.stop_obstruction_pulse()
-            if self.ser:
-                self._send_command('0')  # Turn off everything
+        """Disconnect from serial port"""
+        if self.connected and self.ser:
+            try:
                 self.ser.close()
-        except:
-            pass
-        finally:
+            except:
+                pass
             self.connected = False
+            print("✅ Disconnected from Bluetooth")
     
-    def _send_command(self, command: str) -> bool:
-        """Send command to Arduino"""
+    def send_command(self, command: int):
+        """Send simple command to Arduino"""
         if not self.connected or not self.ser:
+            print("❌ Not connected to Bluetooth")
             return False
             
         try:
-            self.ser.write(f"{command}\n".encode())
-            print(f"Sent: {command}")
+            command_str = f"{command}\n"
+            self.ser.write(command_str.encode())
+            self.ser.flush()
+            print(f"📡 Sent: {command}")
             return True
-        except:
+        except Exception as e:
+            print(f"❌ Failed to send: {e}")
             self.connected = False
             return False
     
     def send_drowning_alert(self):
-        """Drowning alert - HIGH frequency (continuous)"""
-        if self.connected:
-            self.stop_obstruction_pulse()
-            return self._send_command('1')  # High frequency
+        """Send drowning alert"""
+        return self.send_command(1)
     
     def send_obstruction_alert(self):
-        """Obstruction alert - LOW frequency (pulsing)"""
-        if self.connected:
-            self.stop_obstruction_pulse()
-            return self._send_command('2')  # Low frequency
+        """Send obstruction alert"""
+        return self.send_command(2)
     
     def send_clear_alert(self):
-        """Clear all alerts"""
-        if self.connected:
-            self.stop_obstruction_pulse()
-            return self._send_command('0')
+        """Send clear alert"""
+        return self.send_command(0)
+
+# Test
+if __name__ == "__main__":
+    bt = BluetoothTransmitter()
+    ports = bt.list_ports()
+    print("Ports:", ports)
     
-    def start_obstruction_pulse(self):
-        """Start obstruction pulsing with low frequency"""
-        if not self.connected or self.obstruction_pulsing:
-            return False
-            
-        self.obstruction_pulsing = True
-        self.stop_pulse.clear()
-        
-        def pulse_loop():
-            while self.obstruction_pulsing and not self.stop_pulse.is_set():
-                self._send_command('2')  # Low frequency on
-                time.sleep(1.0)
-                if self.stop_pulse.is_set():
-                    break
-                self._send_command('0')  # Off
-                time.sleep(1.0)
-        
-        threading.Thread(target=pulse_loop, daemon=True).start()
-        return True
-    
-    def stop_obstruction_pulse(self):
-        """Stop obstruction pulsing"""
-        if self.obstruction_pulsing:
-            self.obstruction_pulsing = False
-            self.stop_pulse.set()
-            self._send_command('0')
-    
-    def send(self, command: str) -> bool:
-        """Legacy support"""
-        return self._send_command(command)
+    if ports and bt.connect(ports[0]):
+        print("Testing...")
+        bt.send_drowning_alert()
+        time.sleep(3)
+        bt.send_clear_alert()
+        time.sleep(1)
+        bt.send_obstruction_alert()
+        time.sleep(3)
+        bt.send_clear_alert()
+        bt.disconnect()

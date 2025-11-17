@@ -1,4 +1,4 @@
-# main.py
+# main.py - UPDATED WITH OPTIONAL PERIMETER
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import time
@@ -235,7 +235,7 @@ class MainMenu:
         footer_label = tk.Label(footer_frame,
                                 text="© 2025 AquaSense-AI Team",
                                 font=("Arial", 10),
-                                fg="#666666",  # Fixed: Use actual color value instead of self.text_color
+                                fg="#666666",
                                 bg="#E6F3FF")
         footer_label.pack(pady=5)
         
@@ -286,7 +286,7 @@ class SetupScreen:
         self.start_btn = None
         self.preview_btn = None  # Initialize preview_btn for both modes
         
-        # Bluetooth
+        # Bluetooth - UPDATED: Use simplified transmitter
         try:
             from transmitter import BluetoothTransmitter
             self.bt = BluetoothTransmitter()
@@ -295,12 +295,18 @@ class SetupScreen:
             self.bt = None
             self.bt_available = False
             
-        # Perimeter
+        # Perimeter - NOW OPTIONAL
         try:
             from core.perimeter import PerimeterMonitor
             self.perimeter = PerimeterMonitor()
+            self.perimeter_available = True
         except ImportError:
             self.perimeter = None
+            self.perimeter_available = False
+            
+        # Perimeter configuration
+        self.use_perimeter = tk.BooleanVar(value=False)  # Default to not using perimeter
+        self.perimeter_configured = False
             
         self.setup_ui()
         
@@ -439,19 +445,35 @@ class SetupScreen:
                   command=self.toggle_camera_preview)
         self.preview_btn.grid(row=2, column=0, columnspan=2, pady=5)
         
-        # Perimeter setup (only for live mode)
-        if self.perimeter:
-            perimeter_frame = ttk.LabelFrame(parent, text="Perimeter Setup")
+        # Perimeter setup (only for live mode) - NOW OPTIONAL
+        if self.perimeter_available:
+            perimeter_frame = ttk.LabelFrame(parent, text="Perimeter Setup (Optional)")
             perimeter_frame.pack(fill=tk.X, pady=(0, 15))
             
-            self.draw_perimeter_btn = ttk.Button(perimeter_frame,
+            # Perimeter enable/disable checkbox
+            perimeter_toggle_frame = tk.Frame(perimeter_frame, bg="#E6F3FF")
+            perimeter_toggle_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            ttk.Checkbutton(perimeter_toggle_frame, 
+                          text="Enable Perimeter Monitoring",
+                          variable=self.use_perimeter,
+                          command=self.toggle_perimeter_options).pack(side=tk.LEFT)
+            
+            # Perimeter controls (initially disabled)
+            self.perimeter_controls_frame = tk.Frame(perimeter_frame, bg="#E6F3FF")
+            self.perimeter_controls_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            self.draw_perimeter_btn = ttk.Button(self.perimeter_controls_frame,
                       text="Draw Perimeter",
                       command=self.draw_perimeter,
                       state=tk.DISABLED)
-            self.draw_perimeter_btn.pack(pady=10)
+            self.draw_perimeter_btn.pack(pady=5)
                       
-            self.perimeter_status = ttk.Label(perimeter_frame, text="Not configured")
+            self.perimeter_status = ttk.Label(self.perimeter_controls_frame, text="Not configured")
             self.perimeter_status.pack(pady=5)
+            
+            # Initially disable perimeter controls
+            self.toggle_perimeter_options()
         
         # Auto-refresh cameras
         self.refresh_cameras()
@@ -461,6 +483,23 @@ class SetupScreen:
                                      text="Preview Area\n\nFor Live Mode: Start camera preview\nFor Simulate Mode: Select video file", 
                                      fg="white", font=("Arial", 12), justify=tk.CENTER)
         self.preview_label.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+        
+    def toggle_perimeter_options(self):
+        """Enable or disable perimeter controls based on checkbox"""
+        if self.use_perimeter.get():
+            # Enable perimeter controls
+            if hasattr(self, 'draw_perimeter_btn'):
+                self.draw_perimeter_btn.config(state=tk.NORMAL)
+            self.perimeter_status.config(text="Not configured")
+        else:
+            # Disable perimeter controls
+            if hasattr(self, 'draw_perimeter_btn'):
+                self.draw_perimeter_btn.config(state=tk.DISABLED)
+            self.perimeter_status.config(text="Perimeter disabled")
+            self.perimeter_configured = False
+            
+        # Update start conditions
+        self.check_start_conditions()
         
     def refresh_serial_ports(self):
         if self.bt_available and hasattr(self, 'serial_combo'):
@@ -604,8 +643,9 @@ class SetupScreen:
             self.preview_running = True
             if self.preview_btn:
                 self.preview_btn.config(text="Stop Preview")
-            if self.perimeter and hasattr(self, 'draw_perimeter_btn'):
-                self.draw_perimeter_btn.config(state=tk.NORMAL)
+            if self.perimeter_available and hasattr(self, 'draw_perimeter_btn'):
+                if self.use_perimeter.get():
+                    self.draw_perimeter_btn.config(state=tk.NORMAL)
             
             def preview_thread():
                 while self.preview_running:
@@ -628,7 +668,7 @@ class SetupScreen:
         self.preview_running = False
         if self.preview_btn:
             self.preview_btn.config(text="Start Preview" if self.mode == 'live' else "Preview Video")
-        if self.perimeter and hasattr(self, 'draw_perimeter_btn'):
+        if self.perimeter_available and hasattr(self, 'draw_perimeter_btn'):
             self.draw_perimeter_btn.config(state=tk.DISABLED)
         if self.camera_cap:
             self.camera_cap.release()
@@ -651,8 +691,10 @@ class SetupScreen:
         def perimeter_callback(success):
             if success:
                 self.perimeter_status.config(text="Configured ✓", foreground="green")
+                self.perimeter_configured = True
             else:
                 self.perimeter_status.config(text="Cancelled", foreground="red")
+                self.perimeter_configured = False
             self.check_start_conditions()
             # Restart preview
             self.start_camera_preview()
@@ -681,7 +723,12 @@ class SetupScreen:
                 self.start_btn.config(state=tk.DISABLED)
         else:
             has_camera = self.preview_running
-            has_perimeter = self.perimeter and self.perimeter.drawing_complete if self.perimeter else True
+            
+            # Perimeter is now optional - only required if enabled
+            if self.perimeter_available and self.use_perimeter.get():
+                has_perimeter = self.perimeter_configured
+            else:
+                has_perimeter = True  # Not required if perimeter is disabled
             
             if has_model and has_camera and has_perimeter:
                 self.start_btn.config(state=tk.NORMAL)
@@ -701,7 +748,13 @@ class SetupScreen:
             config['video_path'] = self.video_path_var.get()
         else:
             config['camera_index'] = self.camera_index
-            config['perimeter'] = self.perimeter
+            # Only include perimeter if it's available and enabled
+            if self.perimeter_available and self.use_perimeter.get() and self.perimeter_configured:
+                config['perimeter'] = self.perimeter
+                config['use_perimeter'] = True
+            else:
+                config['perimeter'] = None
+                config['use_perimeter'] = False
             
         # Stop preview if running
         self.cleanup_preview()
@@ -759,11 +812,11 @@ class MonitorScreen:
         self.last_drowning_state = False
         self.last_obstruction_state = False
         
-        # Obstruction tracking
-        self.obstruction_start_time = 0
-        self.continuous_obstruction = False
-        self.obstruction_duration = 0
+        # Obstruction tracking - MODIFIED
         self.obstruction_alert_active = False
+        self.obstruction_start_time = 0  # Track when obstruction first detected
+        self.obstruction_min_duration = 6.0  # Minimum 6 seconds before clearing
+        self.obstruction_signal_sent = False  # Track if signal already sent
         
         # Detection fallback
         self.detection_error_count = 0
@@ -829,9 +882,6 @@ class MonitorScreen:
         self.obstruction_label = ttk.Label(stats_frame, text="Obstructions: 0")
         self.obstruction_label.pack(anchor=tk.W, pady=2)
         
-        self.obstruction_duration_label = ttk.Label(stats_frame, text="Duration: 0s")
-        self.obstruction_duration_label.pack(anchor=tk.W, pady=2)
-        
         # Detector status
         self.detector_status_label = ttk.Label(stats_frame, text="Detector: Initializing", foreground="blue")
         self.detector_status_label.pack(anchor=tk.W, pady=2)
@@ -850,13 +900,14 @@ class MonitorScreen:
         visibility_frame = ttk.LabelFrame(right_panel, text="Display Options", width=280)
         visibility_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # Add visibility checkbox - ONLY perimeter visibility remains
-        self.visibility_var = tk.BooleanVar(value=True)
-        self.visibility_check = ttk.Checkbutton(visibility_frame, 
-                                              text="Show Perimeter", 
-                                              variable=self.visibility_var,
-                                              command=lambda: self.set_visible(self.visibility_var.get()))
-        self.visibility_check.pack(anchor=tk.W, pady=2)
+        # Add visibility checkbox - ONLY perimeter visibility remains (if perimeter is enabled)
+        if self.config.get('use_perimeter', False):
+            self.visibility_var = tk.BooleanVar(value=True)
+            self.visibility_check = ttk.Checkbutton(visibility_frame, 
+                                                  text="Show Perimeter", 
+                                                  variable=self.visibility_var,
+                                                  command=lambda: self.set_visible(self.visibility_var.get()))
+            self.visibility_check.pack(anchor=tk.W, pady=2)
         
         # Bluetooth status
         if self.config.get('bluetooth_connected'):
@@ -884,8 +935,8 @@ class MonitorScreen:
                       command=self.test_drowning_alert).pack(fill=tk.X, pady=2)
             
             ttk.Button(test_frame,
-                      text="Test Obstruction Pulse",
-                      command=self.test_obstruction_pulse).pack(fill=tk.X, pady=2)
+                      text="Test Obstruction Alert",
+                      command=self.test_obstruction_alert).pack(fill=tk.X, pady=2)
             
             ttk.Button(test_frame,
                       text="Clear Alerts",
@@ -900,8 +951,10 @@ class MonitorScreen:
         else:
             camera_index = self.config.get('camera_index', 0)
             source_text = f"Source: Camera {camera_index}"
-            if self.config.get('perimeter') and self.config['perimeter'].drawing_complete:
+            if self.config.get('use_perimeter', False):
                 source_text += " | Perimeter: Active"
+            else:
+                source_text += " | Perimeter: Disabled"
             
         source_label = tk.Label(bottom_frame, text=source_text, bg="#E6F3FF", fg="#666666")
         source_label.pack(side=tk.LEFT)
@@ -917,11 +970,11 @@ class MonitorScreen:
             self.config['bluetooth'].send_drowning_alert()
             self.drowning_alert_label.config(text="Drowning: TEST ALERT", foreground="red")
             
-    def test_obstruction_pulse(self):
-        """Test obstruction pulse via Bluetooth"""
+    def test_obstruction_alert(self):
+        """Test obstruction alert via Bluetooth"""
         if self.config.get('bluetooth_connected') and self.config.get('bluetooth'):
-            self.config['bluetooth'].start_obstruction_pulse()
-            self.obstruction_alert_label.config(text="Obstruction: TEST PULSE", foreground="orange")
+            self.config['bluetooth'].send_obstruction_alert()
+            self.obstruction_alert_label.config(text="Obstruction: TEST ALERT", foreground="orange")
             
     def test_clear_alerts(self):
         """Clear all alerts via Bluetooth"""
@@ -1002,11 +1055,10 @@ class MonitorScreen:
             self.last_drowning_state = False
             self.last_obstruction_state = False
             
-            # Initialize obstruction tracking
-            self.obstruction_start_time = 0
-            self.continuous_obstruction = False
-            self.obstruction_duration = 0
+            # Initialize obstruction tracking - MODIFIED
             self.obstruction_alert_active = False
+            self.obstruction_start_time = 0
+            self.obstruction_signal_sent = False
             
             # Reset error counter
             self.detection_error_count = 0
@@ -1114,96 +1166,107 @@ class MonitorScreen:
                 self.detection_count += 1
                 self.detection_label.config(text=f"Detections: {self.detection_count}")
             
-            # Perimeter monitoring for live mode - PRIORITY CHECK
+            # Perimeter monitoring for live mode - ONLY IF ENABLED
             current_obstruction = False
             obstruction_percentage = 0
             
             if (self.config['mode'] == 'live' and 
+                self.config.get('use_perimeter', False) and
                 self.config.get('perimeter') and
                 time.time() - self.last_perimeter_check > self.perimeter_interval):
                 
                 try:
                     obstructed, percentage = self.config['perimeter'].check_obstruction(frame)
                     
-                    # FIXED: Only alert if 100% obstructed
-                    current_obstruction = obstructed and percentage >= 45.9
+                    # Use reasonable obstruction threshold
+                    current_obstruction = obstructed and percentage >= 40.0
                     obstruction_percentage = percentage
                     
                     if current_obstruction:
                         self.obstruction_count += 1
                         self.obstruction_label.config(text=f"Obstructions: {self.obstruction_count}")
                         
-                        # Track continuous obstruction
-                        if not self.continuous_obstruction:
-                            self.obstruction_start_time = time.time()
-                            self.continuous_obstruction = True
-                        
-                        self.obstruction_duration = time.time() - self.obstruction_start_time
-                        self.obstruction_duration_label.config(text=f"Duration: {self.obstruction_duration:.1f}s")
-                        
-                        # Add obstruction overlay with duration - FIXED TEXT
+                        # Add obstruction overlay
                         cv2.putText(annotated, f"PERIMETER OBSTRUCTED: {percentage:.1f}%", 
-                                (10, annotated.shape[0] - 60),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                        cv2.putText(annotated, f"DURATION: {self.obstruction_duration:.1f}s", 
                                 (10, annotated.shape[0] - 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                    else:
-                        # Reset obstruction tracking
-                        self.continuous_obstruction = False
-                        self.obstruction_duration = 0
-                        self.obstruction_duration_label.config(text="Duration: 0s")
                     
                     self.last_perimeter_check = time.time()
                 except Exception as e:
                     print(f"Perimeter check error: {e}")
             
-            # PRIORITY: Handle obstruction alerts FIRST (highest priority)
+            # PRIORITY: Handle obstruction alerts with 6-second minimum duration
             if self.config.get('bluetooth_connected') and self.config.get('bluetooth'):
                 if current_obstruction:
-                    # OBSTRUCTION HAS PRIORITY - continuous alert for ongoing obstruction
+                    current_time = time.time()
+                    
                     if not self.obstruction_alert_active:
-                        # Start obstruction pulsing
-                        self.config['bluetooth'].start_obstruction_pulse()
-                        self.obstruction_alert_label.config(text="Obstruction: CONTINUOUS ALERT", foreground="red")
+                        # First detection - initialize tracking
+                        self.obstruction_start_time = current_time
                         self.obstruction_alert_active = True
+                        self.obstruction_signal_sent = False
+                        print("🚨 Initial obstruction detection")
                     
-                    # Keep obstruction pulse active continuously while obstructed
-                    if hasattr(self.config['bluetooth'], 'keep_obstruction_active'):
-                        self.config['bluetooth'].keep_obstruction_active()
+                    obstruction_duration = current_time - self.obstruction_start_time
                     
-                    # Clear any drowning alerts while obstruction is active
+                    # Send signal immediately on first detection
+                    if not self.obstruction_signal_sent:
+                        self.config['bluetooth'].send_obstruction_alert()
+                        self.obstruction_signal_sent = True
+                        self.obstruction_alert_label.config(text="Obstruction: SIGNAL SENT", foreground="red")
+                        print("📡 Obstruction signal sent to Arduino")
+                    
+                    # Update display with duration
+                    duration_text = f"Obstruction: {obstruction_duration:.1f}s"
+                    self.obstruction_alert_label.config(text=duration_text, 
+                                                      foreground="red" if obstruction_duration >= 1.0 else "orange")
+                    
+                    # Override drowning alerts
                     if self.last_drowning_state:
                         self.config['bluetooth'].send_clear_alert()
                         self.drowning_alert_label.config(text="Drowning: OVERRIDDEN", foreground="orange")
                         self.last_drowning_state = False
                         
                 elif self.obstruction_alert_active:
-                    # Stop obstruction pulsing when no longer obstructed
-                    self.config['bluetooth'].stop_obstruction_pulse()
-                    self.obstruction_alert_label.config(text="Obstruction: No Alert", foreground="green")
-                    self.obstruction_alert_active = False
-                    self.continuous_obstruction = False
-                    self.obstruction_duration = 0
-                    self.obstruction_duration_label.config(text="Duration: 0s")
+                    # Obstruction cleared - check if we should maintain state
+                    current_time = time.time()
+                    obstruction_duration = current_time - self.obstruction_start_time
+                    
+                    if obstruction_duration >= self.obstruction_min_duration:
+                        # Valid obstruction that lasted long enough - clear it
+                        self.config['bluetooth'].send_clear_alert()
+                        self.obstruction_alert_label.config(text="Obstruction: CLEARED", foreground="green")
+                        self.obstruction_alert_active = False
+                        self.obstruction_signal_sent = False
+                        print(f"✅ Obstruction cleared after {obstruction_duration:.1f} seconds")
+                    else:
+                        # Brief obstruction - keep displaying but don't send another signal
+                        self.obstruction_alert_label.config(
+                            text=f"Obstruction: {obstruction_duration:.1f}s (HOLD)", 
+                            foreground="orange"
+                        )
+                        # Don't clear the alert_active flag - maintain obstructed state
             
             # SECONDARY: Handle drowning detection (only if no obstruction)
             if (self.config.get('bluetooth_connected') and self.config.get('bluetooth') and
-                not current_obstruction):
+                not self.obstruction_alert_active):  # Use obstruction_alert_active instead of current_obstruction
                 
                 if detected and not self.last_drowning_state:
-                    # Start drowning alert (only if no obstruction)
+                    # Start drowning alert (continuous - no pulsing)
                     self.config['bluetooth'].send_drowning_alert()
-                    self.drowning_alert_label.config(text="Drowning: ALERT ACTIVE", foreground="red")
+                    self.drowning_alert_label.config(text="Drowning: CONTINUOUS ALERT", foreground="red")
                     self.last_drowning_state = True
+                    print("Drowning alert sent - continuous tone")
                 elif not detected and self.last_drowning_state:
                     # Clear drowning alert
                     self.config['bluetooth'].send_clear_alert()
                     self.drowning_alert_label.config(text="Drowning: No Alert", foreground="green")
                     self.last_drowning_state = False
+                    print("Drowning alert cleared")
                 
-            # Draw perimeter if configured and visible
+            # Draw perimeter if configured and visible and enabled
             if (self.config['mode'] == 'live' and 
+                self.config.get('use_perimeter', False) and
                 self.config.get('perimeter') and
                 self.config['perimeter'].drawing_complete and
                 self.show_perimeter):
@@ -1213,16 +1276,21 @@ class MonitorScreen:
                 except Exception as e:
                     print(f"Perimeter drawing error: {e}")
             
-            # Update status with OBSTRUCTION PRIORITY - FIXED TEXT
-            if current_obstruction:
-                # OBSTRUCTION HAS HIGHEST PRIORITY
-                self.status_label.config(text="● PRIORITY: PERIMETER OBSTRUCTED", fg="red")
-                cv2.putText(annotated, "PRIORITY ALERT: PERIMETER OBSTRUCTED", (50, 80),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
-                # Flash effect for continuous obstruction
-                if int(time.time() * 2) % 2 == 0:  # Blink every 0.5 seconds
-                    cv2.putText(annotated, "CONTINUOUS ALERT ACTIVE", (50, 110),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            # Update status with OBSTRUCTION PRIORITY
+            if self.obstruction_alert_active:
+                current_time = time.time()
+                obstruction_duration = current_time - self.obstruction_start_time
+                
+                if obstruction_duration >= self.obstruction_min_duration:
+                    status_text = f"● PERIMETER OBSTRUCTED: {obstruction_duration:.1f}s"
+                else:
+                    status_text = f"● OBSTRUCTION DETECTED: {obstruction_duration:.1f}s"
+                
+                self.status_label.config(text=status_text, fg="red")
+                
+                # Add visual feedback to video frame
+                cv2.putText(annotated, status_text, (50, 80),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
             elif detected:
                 # Drowning detection (secondary priority)
                 self.status_label.config(text="● ALERT: DROWNING DETECTED", fg="red")
@@ -1287,7 +1355,6 @@ class MonitorScreen:
         if self.config.get('bluetooth_connected') and self.config.get('bluetooth'):
             try:
                 self.config['bluetooth'].send_clear_alert()
-                self.config['bluetooth'].stop_obstruction_pulse()
             except Exception as e:
                 print(f"Error clearing Bluetooth alerts: {e}")
             
