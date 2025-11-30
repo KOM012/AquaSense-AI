@@ -1,4 +1,4 @@
-# main.py - UPDATED WITH OPTIONAL PERIMETER
+# main.py - OPTIMIZED VERSION
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import time
@@ -8,6 +8,7 @@ import cv2
 from PIL import Image, ImageTk
 import threading
 import numpy as np
+import gc
 
 APP_ROOT   = os.path.dirname(os.path.abspath(__file__))
 ICON_PATH  = os.path.join(APP_ROOT, 'icon.ico')
@@ -80,6 +81,33 @@ def cleanup_ports():
     except Exception as e:
         print(f"⚠️ Port cleanup error: {e}")
         return [], []
+
+def force_system_cleanup():
+    """Force cleanup of all system resources"""
+    print("🧹 Performing system cleanup...")
+    
+    # Clean up OpenCV resources
+    cv2.destroyAllWindows()
+    
+    # Force garbage collection
+    for i in range(3):
+        gc.collect()
+    
+    # Clean up CUDA memory if available
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            print("✅ CUDA memory cleared")
+    except ImportError:
+        pass
+    
+    # Clean up ports
+    cleanup_ports()
+    
+    time.sleep(0.5)
+    print("✅ System cleanup completed")
 
 class SplashScreen:
     def __init__(self):
@@ -240,7 +268,8 @@ class MainMenu:
         footer_label.pack(pady=5)
         
     def open_simulate_mode(self):
-        # Clean ports before opening simulate mode
+        # Force cleanup before opening simulate mode
+        force_system_cleanup()
         available_ports, locked_ports = cleanup_ports()
         if locked_ports:
             print(f"Warning: Some ports are locked: {locked_ports}")
@@ -250,7 +279,8 @@ class MainMenu:
         setup.show()
         
     def open_live_mode(self):
-        # Clean ports before opening live mode
+        # Force cleanup before opening live mode
+        force_system_cleanup()
         available_ports, locked_ports = cleanup_ports()
         if locked_ports:
             print(f"Warning: Some ports are locked: {locked_ports}")
@@ -284,9 +314,9 @@ class SetupScreen:
         self.conf_var = tk.DoubleVar(value=0.5)
         self.camera_combo = None
         self.start_btn = None
-        self.preview_btn = None  # Initialize preview_btn for both modes
+        self.preview_btn = None
         
-        # Bluetooth - UPDATED: Use simplified transmitter
+        # Bluetooth
         try:
             from transmitter import BluetoothTransmitter
             self.bt = BluetoothTransmitter()
@@ -295,7 +325,7 @@ class SetupScreen:
             self.bt = None
             self.bt_available = False
             
-        # Perimeter - NOW OPTIONAL
+        # Perimeter
         try:
             from core.perimeter import PerimeterMonitor
             self.perimeter = PerimeterMonitor()
@@ -305,7 +335,7 @@ class SetupScreen:
             self.perimeter_available = False
             
         # Perimeter configuration
-        self.use_perimeter = tk.BooleanVar(value=False)  # Default to not using perimeter
+        self.use_perimeter = tk.BooleanVar(value=False)
         self.perimeter_configured = False
             
         self.setup_ui()
@@ -382,7 +412,7 @@ class SetupScreen:
             # Auto-refresh ports
             self.refresh_serial_ports()
         
-        # Model selection - FIXED LAYOUT
+        # Model selection
         model_frame = ttk.LabelFrame(parent, text="AI Model Configuration")
         model_frame.pack(fill=tk.X, pady=(0, 15))
         
@@ -395,7 +425,7 @@ class SetupScreen:
                   text="Browse Model", 
                   command=self.browse_model).pack(side=tk.LEFT)
         
-        # Confidence row - FIXED to be on new line
+        # Confidence row
         confidence_frame = tk.Frame(model_frame, bg="#E6F3FF")
         confidence_frame.pack(fill=tk.X, padx=5, pady=5)
         
@@ -445,7 +475,7 @@ class SetupScreen:
                   command=self.toggle_camera_preview)
         self.preview_btn.grid(row=2, column=0, columnspan=2, pady=5)
         
-        # Perimeter setup (only for live mode) - NOW OPTIONAL
+        # Perimeter setup (only for live mode)
         if self.perimeter_available:
             perimeter_frame = ttk.LabelFrame(parent, text="Perimeter Setup (Optional)")
             perimeter_frame.pack(fill=tk.X, pady=(0, 15))
@@ -557,7 +587,7 @@ class SetupScreen:
             self.check_start_conditions()
             
     def preview_video_file(self):
-        """Preview selected video file - FIXED to play full video"""
+        """Preview selected video file"""
         if not self.video_path_var.get():
             messagebox.showwarning("No Video", "Please select a video file first")
             return
@@ -602,12 +632,16 @@ class SetupScreen:
             
     def refresh_cameras(self):
         cameras = []
-        for i in range(3):  # Check first 3 cameras
+        # Check more cameras with optimized backend selection
+        for i in range(5):  # Check first 5 cameras
             try:
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    cameras.append(f"Camera {i}")
-                    cap.release()
+                # Try different backends for better compatibility
+                for backend in [cv2.CAP_DSHOW, cv2.CAP_ANY]:
+                    cap = cv2.VideoCapture(i, backend)
+                    if cap.isOpened():
+                        cameras.append(f"Camera {i}")
+                        cap.release()
+                        break
             except:
                 pass
                 
@@ -634,7 +668,20 @@ class SetupScreen:
             
         try:
             self.camera_index = int(selected.split()[-1])
-            self.camera_cap = cv2.VideoCapture(self.camera_index)
+            
+            # Try different backends for optimal performance
+            for backend in [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]:
+                self.camera_cap = cv2.VideoCapture(self.camera_index, backend)
+                if self.camera_cap.isOpened():
+                    # Optimize camera settings
+                    self.camera_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    self.camera_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    self.camera_cap.set(cv2.CAP_PROP_FPS, 30)
+                    self.camera_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
+                    print(f"✅ Camera opened with backend: {backend}")
+                    break
+                else:
+                    self.camera_cap.release()
             
             if not self.camera_cap.isOpened():
                 messagebox.showerror("Camera Error", f"Cannot open camera {self.camera_index}")
@@ -760,9 +807,7 @@ class SetupScreen:
         self.cleanup_preview()
         
         # Clean up ports before leaving setup
-        available_ports, locked_ports = cleanup_ports()
-        if locked_ports:
-            print(f"Warning: Some ports are locked: {locked_ports}")
+        force_system_cleanup()
         
         self.root.destroy()
         
@@ -785,9 +830,7 @@ class SetupScreen:
         self.cleanup_preview()
         
         # Clean up ports before leaving setup
-        available_ports, locked_ports = cleanup_ports()
-        if locked_ports:
-            print(f"Warning: Some ports are locked: {locked_ports}")
+        force_system_cleanup()
         
         self.root.destroy()
         menu = MainMenu()
@@ -808,22 +851,29 @@ class MonitorScreen:
         self.detector = None
         self.cap = None
         self.last_perimeter_check = 0
-        self.perimeter_interval = 2.0  # Check every 2 seconds for faster response
+        self.perimeter_interval = 1.0  # Reduced for faster response
         self.last_drowning_state = False
         self.last_obstruction_state = False
         
-        # Obstruction tracking - MODIFIED
+        # Obstruction tracking
         self.obstruction_alert_active = False
-        self.obstruction_start_time = 0  # Track when obstruction first detected
-        self.obstruction_min_duration = 6.0  # Minimum 6 seconds before clearing
-        self.obstruction_signal_sent = False  # Track if signal already sent
+        self.obstruction_start_time = 0
+        self.obstruction_min_duration = 6.0
+        self.obstruction_signal_sent = False
         
         # Detection fallback
         self.detection_error_count = 0
         self.max_detection_errors = 5
         self.using_fallback_detector = False
         
-        # Visibility controls - REMOVED detection boxes visibility
+        # Performance optimization
+        self.frame_buffer = None
+        self.last_frame_time = 0
+        self.target_fps = 60  # Increased target FPS
+        self.frame_skip_counter = 0
+        self.frame_skip_interval = 1  # Process every frame
+        
+        # Visibility controls
         self.show_perimeter = True
         
         self.setup_ui()
@@ -896,7 +946,7 @@ class MonitorScreen:
         self.obstruction_alert_label = ttk.Label(self.alert_frame, text="Obstruction: No Alert", foreground="green")
         self.obstruction_alert_label.pack(anchor=tk.W, pady=2)
         
-        # Visibility Controls - REMOVED detection boxes checkbox
+        # Visibility Controls
         visibility_frame = ttk.LabelFrame(right_panel, text="Display Options", width=280)
         visibility_frame.pack(fill=tk.X, pady=(0, 15))
         
@@ -986,20 +1036,19 @@ class MonitorScreen:
     def initialize_detector_with_fallback(self):
         """Initialize detector with comprehensive error handling and fallback"""
         try:
-                from detect import RealtimeDetector
-                print("Attempting to initialize RealtimeDetector...")
-                detector = RealtimeDetector(
-                    self.config['model_path'],
-                    conf=self.config['confidence']
-                )
-                # Test the detector with a dummy frame
-                test_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                annotated, detected, detections = detector.detect_frame(test_frame)
-                print("RealtimeDetector initialized successfully")
-                self.detector_status_label.config(text="Detector: YOLO (Active)", foreground="green")
-                self.using_fallback_detector = False
-                return detector
-
+            from detect import RealtimeDetector
+            print("Attempting to initialize RealtimeDetector...")
+            detector = RealtimeDetector(
+                self.config['model_path'],
+                conf=self.config['confidence']
+            )
+            # Test the detector with a dummy frame
+            test_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            annotated, detected, detections = detector.detect_frame(test_frame)
+            print("RealtimeDetector initialized successfully")
+            self.detector_status_label.config(text="Detector: YOLO (Active)", foreground="green")
+            self.using_fallback_detector = False
+            return detector
                 
         except Exception as e:
             print(f"All detector initialization failed: {e}")
@@ -1027,7 +1076,7 @@ class MonitorScreen:
             # Initialize detector with fallback
             self.detector = self.initialize_detector_with_fallback()
             
-            # Initialize video source
+            # Initialize video source with optimized settings
             if self.config['mode'] == 'simulate':
                 video_path = self.config.get('video_path', '')
                 if video_path and os.path.exists(video_path):
@@ -1038,8 +1087,20 @@ class MonitorScreen:
                     print("Using demo video")
             else:
                 camera_index = self.config.get('camera_index', 0)
-                self.cap = cv2.VideoCapture(camera_index)
-                print(f"Using camera: {camera_index}")
+                # Try different backends for optimal performance
+                for backend in [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]:
+                    self.cap = cv2.VideoCapture(camera_index, backend)
+                    if self.cap.isOpened():
+                        # Optimize camera settings
+                        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        self.cap.set(cv2.CAP_PROP_FPS, 60)
+                        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
+                        print(f"✅ Camera opened with backend: {backend}")
+                        break
+                    else:
+                        if self.cap:
+                            self.cap.release()
                 
             if not self.cap or not self.cap.isOpened():
                 self.cap = self.create_demo_video()
@@ -1055,7 +1116,7 @@ class MonitorScreen:
             self.last_drowning_state = False
             self.last_obstruction_state = False
             
-            # Initialize obstruction tracking - MODIFIED
+            # Initialize obstruction tracking
             self.obstruction_alert_active = False
             self.obstruction_start_time = 0
             self.obstruction_signal_sent = False
@@ -1063,8 +1124,11 @@ class MonitorScreen:
             # Reset error counter
             self.detection_error_count = 0
             
-            # Start monitoring loop
-            self.monitor_loop()
+            # Pre-allocate frame buffer for performance
+            self.frame_buffer = np.zeros((480, 640, 3), dtype=np.uint8)
+            
+            # Start monitoring loop with minimal delay
+            self.root.after(1, self.monitor_loop)
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start monitoring: {e}")
@@ -1103,21 +1167,33 @@ class MonitorScreen:
             return
             
         try:
+            current_time = time.time()
+            
+            # Frame skipping for very high FPS scenarios
+            self.frame_skip_counter += 1
+            if self.frame_skip_counter % self.frame_skip_interval != 0:
+                if self.running:
+                    self.root.after(1, self.monitor_loop)
+                return
+            
             ret, frame = self.cap.read()
             if not ret:
                 if self.config['mode'] == 'simulate':
                     if hasattr(self.cap, 'set'):
                         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    self.root.after(30, self.monitor_loop)
+                    if self.running:
+                        self.root.after(1, self.monitor_loop)
                     return
                 else:
-                    self.root.after(30, self.monitor_loop)
+                    if self.running:
+                        self.root.after(1, self.monitor_loop)
                     return
             
             # Ensure frame is valid
             if frame is None:
                 print("Warning: Received None frame")
-                self.root.after(30, self.monitor_loop)
+                if self.running:
+                    self.root.after(1, self.monitor_loop)
                 return
                 
             # Resize frame for consistent processing
@@ -1173,7 +1249,7 @@ class MonitorScreen:
             if (self.config['mode'] == 'live' and 
                 self.config.get('use_perimeter', False) and
                 self.config.get('perimeter') and
-                time.time() - self.last_perimeter_check > self.perimeter_interval):
+                current_time - self.last_perimeter_check > self.perimeter_interval):
                 
                 try:
                     obstructed, percentage = self.config['perimeter'].check_obstruction(frame)
@@ -1191,7 +1267,7 @@ class MonitorScreen:
                                 (10, annotated.shape[0] - 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                     
-                    self.last_perimeter_check = time.time()
+                    self.last_perimeter_check = current_time
                 except Exception as e:
                     print(f"Perimeter check error: {e}")
             
@@ -1249,7 +1325,7 @@ class MonitorScreen:
             
             # SECONDARY: Handle drowning detection (only if no obstruction)
             if (self.config.get('bluetooth_connected') and self.config.get('bluetooth') and
-                not self.obstruction_alert_active):  # Use obstruction_alert_active instead of current_obstruction
+                not self.obstruction_alert_active):
                 
                 if detected and not self.last_drowning_state:
                     # Start drowning alert (continuous - no pulsing)
@@ -1339,35 +1415,46 @@ class MonitorScreen:
                 self.video_label.config(image=imgtk, text="")
                 self.video_label.image = imgtk
             
-            # Continue loop with proper error handling
+            # Continue loop with minimal delay for maximum performance
             if self.running:
-                self.root.after_idle(self.monitor_loop)
+                self.root.after(1, self.monitor_loop)
             
         except Exception as e:
             print(f"Monitoring loop error: {e}")
             if self.running:
-                self.root.after(30, self.monitor_loop)
+                self.root.after(1, self.monitor_loop)
             
     def stop_monitoring(self):
+        """Enhanced cleanup with comprehensive resource release"""
+        print("🛑 Stopping monitoring and cleaning up resources...")
         self.running = False
         
         # Clear all Bluetooth alerts
         if self.config.get('bluetooth_connected') and self.config.get('bluetooth'):
             try:
                 self.config['bluetooth'].send_clear_alert()
+                self.config['bluetooth'].disconnect()
             except Exception as e:
                 print(f"Error clearing Bluetooth alerts: {e}")
             
+        # Release camera/video resources
         if self.cap and hasattr(self.cap, 'release'):
             try:
                 self.cap.release()
             except Exception as e:
                 print(f"Error releasing capture: {e}")
                 
-        # Clean up ports before leaving monitoring
-        available_ports, locked_ports = cleanup_ports()
-        if locked_ports:
-            print(f"Warning: Some ports are locked: {locked_ports}")
+        # Clean up detector
+        if hasattr(self, 'detector') and self.detector:
+            try:
+                if hasattr(self.detector, 'cleanup'):
+                    self.detector.cleanup()
+                del self.detector
+            except Exception as e:
+                print(f"Error cleaning up detector: {e}")
+        
+        # Force system cleanup
+        force_system_cleanup()
                 
         try:
             self.root.destroy()
@@ -1385,6 +1472,9 @@ class MonitorScreen:
         self.root.mainloop()
 
 def main():
+    # Force initial cleanup
+    force_system_cleanup()
+    
     # Show splash screen
     splash = SplashScreen()
     splash.run_loading()

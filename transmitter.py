@@ -1,4 +1,4 @@
-# transmitter.py - ULTRA SIMPLE VERSION
+# transmitter.py - OPTIMIZED VERSION
 import serial
 import serial.tools.list_ports
 import time
@@ -28,14 +28,18 @@ class BluetoothTransmitter:
             return False
     
     def disconnect(self):
-        """Disconnect from serial port"""
+        """Disconnect from serial port with proper cleanup"""
         if self.connected and self.ser:
             try:
+                # Clear any pending data
+                if self.ser.in_waiting > 0:
+                    self.ser.reset_input_buffer()
                 self.ser.close()
-            except:
-                pass
-            self.connected = False
-            print("✅ Disconnected from Bluetooth")
+            except Exception as e:
+                print(f"⚠️ Error during disconnect: {e}")
+            finally:
+                self.connected = False
+                print("✅ Disconnected from Bluetooth")
     
     def send_command(self, command: int):
         """Send simple command to Arduino"""

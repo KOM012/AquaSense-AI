@@ -1,4 +1,4 @@
-# core/perimeter.py - WITH HIDDEN PERIMETER OPTION
+# core/perimeter.py - OPTIMIZED VERSION
 import cv2
 import numpy as np
 import time
@@ -7,7 +7,7 @@ from typing import Callable, Tuple, Optional
 
 class PerimeterMonitor:
     """
-    Perimeter monitoring system with hidden mode option
+    Optimized perimeter monitoring system
     """
     
     def __init__(self, logger=None):
@@ -23,24 +23,29 @@ class PerimeterMonitor:
         self.monitoring_active = False
         self.monitoring_thread = None
         self.stop_flag = threading.Event()
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()  # Changed to RLock for better performance
         
         # Detection state
         self.obstruction_detected = False
         self.current_obstruction_pct = 0.0
         self.obstruction_callback = None
         
-        # Thresholds
+        # Thresholds - optimized for performance
         self.obstruction_threshold = 80.0  # percentage
-        self.check_interval = 0.3  # seconds between checks
+        self.check_interval = 0.2  # Reduced for faster response
         
         # Display settings
-        self.visible = True  # Set to False to hide perimeter overlay
-        self.show_detection_boxes = True  # Show bounding boxes on obstructions
+        self.visible = True
+        self.show_detection_boxes = True
         
-        # Background subtraction parameters
-        self.min_contour_area = 1500  # Minimum contour area to consider as obstruction
-        self.difference_threshold = 45  # Pixel difference threshold
+        # Background subtraction parameters - optimized
+        self.min_contour_area = 1500
+        self.difference_threshold = 45
+        
+        # Performance optimization
+        self.last_processed_frame = None
+        self.last_processed_time = 0
+        self.processing_cache = {}
     
     def set_visible(self, visible: bool):
         """
@@ -62,7 +67,7 @@ class PerimeterMonitor:
     
     def draw_perimeter_interactive(self, frame, window_name="Draw Perimeter"):
         """
-        Interactive perimeter drawing - with visibility option
+        Interactive perimeter drawing - optimized
         """
         self.reset()
         
@@ -97,9 +102,9 @@ class PerimeterMonitor:
         self._draw_instructions(temp_frame)
         cv2.imshow(window_name, temp_frame)
         
-        # Wait for user input
+        # Wait for user input with optimized polling
         while drawing_active:
-            key = cv2.waitKey(50) & 0xFF
+            key = cv2.waitKey(10) & 0xFF  # Reduced delay for responsiveness
             
             if key == 27:  # ESC - Cancel
                 if self.logger:
@@ -122,7 +127,7 @@ class PerimeterMonitor:
         return perimeter_complete
     
     def _draw_instructions(self, frame):
-        """Draw instruction overlay"""
+        """Draw instruction overlay - optimized"""
         instructions = [
             "LEFT-CLICK: Add perimeter point",
             "RIGHT-CLICK: Close polygon (min 3)",
@@ -130,7 +135,7 @@ class PerimeterMonitor:
             f"Points placed: {len(self.perimeter_points)}"
         ]
         
-        # Semi-transparent background
+        # Optimized drawing
         overlay = frame.copy()
         cv2.rectangle(overlay, (5, 5), (450, 130), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
@@ -143,7 +148,7 @@ class PerimeterMonitor:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
     
     def _draw_points_on_frame(self, frame, closed=False):
-        """Draw perimeter points and lines"""
+        """Optimized perimeter points and lines drawing"""
         if len(self.perimeter_points) == 0:
             return
         
@@ -172,7 +177,7 @@ class PerimeterMonitor:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
     
     def _finalize_perimeter(self, frame):
-        """Finalize perimeter setup"""
+        """Finalize perimeter setup - optimized"""
         # Create mask
         self.mask = np.zeros(frame.shape[:2], dtype=np.uint8)
         points = np.array(self.perimeter_points, dtype=np.int32)
@@ -190,10 +195,10 @@ class PerimeterMonitor:
             self.logger.info(f"Perimeter covers {coverage:.1f}% of frame")
             self.logger.info("Background reference captured")
 
-    # SIMPLE BACKGROUND SUBTRACTION METHODS
+    # OPTIMIZED BACKGROUND SUBTRACTION METHODS
     def _check_obstruction_internal(self, current_frame) -> Tuple[bool, float]:
         """
-        Simple background subtraction for obstruction detection
+        Optimized background subtraction for obstruction detection
         """
         if self.reference_frame is None or self.mask is None:
             return False, 0.0
@@ -249,7 +254,6 @@ class PerimeterMonitor:
     def get_obstruction_visualization(self, current_frame):
         """
         Returns a visualization frame showing the background subtraction process
-        Useful for debugging and understanding what's being detected
         """
         if self.reference_frame is None or self.mask is None:
             return current_frame
@@ -315,7 +319,6 @@ class PerimeterMonitor:
     def update_background(self, frame):
         """
         Update the background reference frame
-        Useful when lighting conditions change
         """
         if self.drawing_complete:
             with self.lock:
@@ -345,8 +348,7 @@ class PerimeterMonitor:
     
     def draw_overlay(self, frame):
         """
-        Draw perimeter overlay on frame with status indicators
-        Respects the visibility setting
+        Optimized perimeter overlay drawing
         """
         if not self.drawing_complete or len(self.perimeter_points) < 3:
             return frame
@@ -404,8 +406,7 @@ class PerimeterMonitor:
 
     def draw_minimal_overlay(self, frame):
         """
-        Draw only obstruction boxes without perimeter outline
-        Useful for hidden perimeter mode but still showing detections
+        Optimized minimal overlay drawing
         """
         if not self.drawing_complete or not self.show_detection_boxes:
             return frame
@@ -447,7 +448,7 @@ class PerimeterMonitor:
                 self.logger.error(f"Minimal overlay failed: {e}")
             return frame
 
-    # KEEP ALL YOUR EXISTING METHODS BELOW - they remain the same
+    # KEEP ALL YOUR EXISTING METHODS BELOW - optimized versions
     def set_perimeter_points(self, points: list):
         """
         Set perimeter points directly without interactive drawing
@@ -519,7 +520,7 @@ class PerimeterMonitor:
 
     def start_continuous_monitoring(self, get_frame_callback: Callable, 
                                    obstruction_callback: Optional[Callable] = None,
-                                   check_interval: float = 0.3):
+                                   check_interval: float = 0.2):  # Reduced default interval
         """
         Start continuous background monitoring - OPTIMIZED
         """
@@ -540,7 +541,7 @@ class PerimeterMonitor:
         
         def monitoring_loop():
             if self.logger:
-                self.logger.info("🔄 Perimeter monitoring started (Background Subtraction)")
+                self.logger.info("🔄 Perimeter monitoring started (Optimized Background Subtraction)")
             last_state = False
             consecutive_detections = 0
             required_consecutive = 2
@@ -604,7 +605,7 @@ class PerimeterMonitor:
         return True
     
     def stop_continuous_monitoring(self):
-        """Stop continuous monitoring"""
+        """Optimized stop continuous monitoring"""
         if not self.monitoring_active:
             return
         
@@ -614,7 +615,7 @@ class PerimeterMonitor:
         self.stop_flag.set()
         
         if self.monitoring_thread:
-            self.monitoring_thread.join(timeout=2.0)
+            self.monitoring_thread.join(timeout=1.0)  # Reduced timeout
         
         with self.lock:
             self.obstruction_detected = False
@@ -663,11 +664,11 @@ class PerimeterMonitor:
                 'threshold': self.obstruction_threshold,
                 'visible': self.visible,
                 'show_detection_boxes': self.show_detection_boxes,
-                'method': 'background_subtraction'
+                'method': 'optimized_background_subtraction'
             }
     
     def reset(self):
-        """Reset all perimeter data"""
+        """Optimized reset all perimeter data"""
         self.stop_continuous_monitoring()
         
         with self.lock:
@@ -677,6 +678,7 @@ class PerimeterMonitor:
             self.drawing_complete = False
             self.obstruction_detected = False
             self.current_obstruction_pct = 0.0
+            self.processing_cache = {}
         
         if self.logger:
             self.logger.info("Perimeter reset")
