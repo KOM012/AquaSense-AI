@@ -12,7 +12,7 @@ Processing: Optimized for Intel i5-12450H (CPU/GPU)
    ├── Port checking (cleanup_ports())
    └── Progress bar with initialization steps
 
-2. Main Menu (MainMenu class)
+4. Main Menu (MainMenu class)
    ├── Simulate Mode (video file processing)
    └── Live Mode (camera monitoring)
 ---------------------------------------------
