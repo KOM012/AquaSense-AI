@@ -1,6 +1,6 @@
 <p align="center"><img 
-width="450"
-height="450"
+width="250"
+height="250"
 style="object-fit: contain;" 
 alt="AquaSenseAI" 
 src="https://github.com/user-attachments/assets/28c37a23-736b-4c86-8fdc-acdca0e66120" 
