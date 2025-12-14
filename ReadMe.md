@@ -20,12 +20,11 @@ Processing: Optimized for Intel i5-12450H (CPU/GPU)
    ├── Port checking (`cleanup_ports()`)<br>
    └── Progress bar with initialization steps
 
-4. **Main Menu** (`MainMenu` class)<br>
+2. **Main Menu** (`MainMenu` class)<br>
    ├── Simulate Mode (video file processing)<br>
    └── Live Mode (camera monitoring)
 ---------------------------------------------
-**Setup Config**<br>
-3. Setup Screen (SetupScreen class)<br>
+3. **Setup Screen** (SetupScreen class)<br>
    ├── Mode-specific configuration<br>
    │   ├── Simulate Mode: Video file selection<br>
    │   └── Live Mode: Camera selection + Perimeter setup<br>
@@ -33,8 +32,7 @@ Processing: Optimized for Intel i5-12450H (CPU/GPU)
    ├── Bluetooth pairing (optional)<br>
    └── Preview functionality
 --------------------------------------------
-**Monitoring Execution**<br>
-4. Monitor Screen (MonitorScreen class) - MAIN OPERATION<br>
+4. **Monitor Screen** (MonitorScreen class) - MAIN OPERATION<br>
    ├── Detector initialization (RealtimeDetector)<br>
    ├── Dual-thread processing:<br>
    │   ├── Main thread: GUI updates, FPS calculation<br>
