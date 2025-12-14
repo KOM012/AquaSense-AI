@@ -2,7 +2,7 @@
 width="250"
 height="250"
 style="object-fit: contain;" 
-alt="AquaSenseAI" 
+alt="[AquaSenseAI](https://youtu.be/0DCnlujg2Xc)" 
 src="https://github.com/user-attachments/assets/28c37a23-736b-4c86-8fdc-acdca0e66120" 
 /><p></p>
 
